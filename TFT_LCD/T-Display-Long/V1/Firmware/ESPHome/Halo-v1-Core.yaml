@@ -923,6 +923,20 @@ button:
     on_press:
       - sen5x.start_fan_autoclean: sen55
 
+  - platform: template
+    name: "Refresh Display"
+    id: refresh_display
+    icon: mdi:monitor-shimmer
+    on_press:
+      - lambda: |-
+          id(lily_display).setup();
+      - delay: 100ms
+      - lvgl.page.show:
+          id: main_page
+      - delay: 100ms
+      - lvgl.widget.redraw:
+          id: main_page
+
 text_sensor:
     # Convert VOC Index To Text: 
     # https://sensirion.com/media/documents/02232963/6294E043/Info_Note_VOC_Index.pdf
