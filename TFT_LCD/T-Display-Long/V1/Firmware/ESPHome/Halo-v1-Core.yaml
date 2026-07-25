@@ -25,6 +25,11 @@ esphome:
 # fork (its I2C write(..., stop) API breaks on 2026.7+).
 # sy6970 remains available via github://yashmulgaonkar/esphome-components if needed.
 
+external_components:
+  - source: github://wander00-1/halo@feature/display-refresh-button
+    components: [qspi_dbi]
+    refresh: always
+
 spi:
   id: lily_spi
   type: quad
@@ -130,6 +135,14 @@ select:
           value: "true"
 
 interval:
+  - interval: 30min
+    then:
+      - logger.log:
+          level: WARN
+          tag: display_health
+          format: "Preventive display reinit"
+      - script.execute: script_refresh_display
+
   - interval: 10s
     then:    
       if:
@@ -337,6 +350,8 @@ script:
             time.year, time.month, time.day_of_month,
             time.hour, time.minute, time.second);
           id(last_display_refresh).publish_state(buf);
+          id(lily_display).reinit();
+      - delay: 250ms
       - lvgl.page.show:
           id: main_page
       - lvgl.widget.redraw:
