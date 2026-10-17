@@ -110,12 +110,29 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     optimistic: true
     entity_category: "config"
+    # Restore can fire before LVGL builds its widgets; info_page on_load resyncs.
     on_turn_on:
       - logger.set_level:
           level: DEBUG
+      - if:
+          condition:
+            lambda: "return id(boot_complete);"
+          then:
+            - lvgl.widget.update:
+                id: info_debug_switch
+                state:
+                  checked: true
     on_turn_off:
       - logger.set_level:
           level: WARN
+      - if:
+          condition:
+            lambda: "return id(boot_complete);"
+          then:
+            - lvgl.widget.update:
+                id: info_debug_switch
+                state:
+                  checked: false
 
 select:
   - platform: template
@@ -357,6 +374,33 @@ script:
       - lvgl.widget.redraw:
           id: main_page
 
+  # Swipe between main_page (sensors) and info_page (device info).
+  - id: show_next_page
+    then:
+      - script.execute: sync_info_page
+      - lvgl.page.next:
+          animation: MOVE_LEFT
+          time: 250ms
+
+  - id: show_prev_page
+    then:
+      - script.execute: sync_info_page
+      - lvgl.page.previous:
+          animation: MOVE_RIGHT
+          time: 250ms
+
+  # Values that publish before LVGL is built (or never re-publish) are
+  # pushed onto the info page here, right before it's shown.
+  - id: sync_info_page
+    then:
+      - lvgl.label.update:
+          id: info_esphome_value
+          text: !lambda 'return id(esphome_version).state.c_str();'
+      - lvgl.widget.update:
+          id: info_debug_switch
+          state:
+            checked: !lambda 'return id(debug_logging).state;'
+
   - id: time_update
     then:
       - lvgl.label.update:
@@ -453,12 +497,29 @@ sensor:
     name: Uptime
     id: sys_uptime
     update_interval: 60s
+    on_value:
+      - lvgl.label.update:
+          id: info_uptime_value
+          text: !lambda |-
+            static char buf[24];
+            uint32_t s = (uint32_t) x;
+            snprintf(buf, sizeof(buf), "%ud %uh %um",
+              (unsigned) (s / 86400), (unsigned) ((s % 86400) / 3600),
+              (unsigned) ((s % 3600) / 60));
+            return buf;
 
   - platform: wifi_signal
     name: RSSI
     id: wifi_signal_db
     update_interval: 60s
     entity_category: "diagnostic"
+    on_value:
+      - lvgl.label.update:
+          id: info_rssi_value
+          text: !lambda |-
+            static char buf[16];
+            snprintf(buf, sizeof(buf), "%d dBm", (int) x);
+            return buf;
 
   - platform: template
     name: "Computed AQI"
@@ -1107,8 +1168,36 @@ text_sensor:
     lambda: 'return {"${version}"};'
   - platform: version
     name: "ESPHome Version"
+    id: esphome_version
     hide_timestamp: true
     entity_category: diagnostic
+
+  # Shown on the swipe-right info page (info_page).
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      id: wifi_ip
+      entity_category: diagnostic
+      on_value:
+        - lvgl.label.update:
+            id: info_ip_value
+            text: !lambda 'return x.empty() ? "--" : x.c_str();'
+    ssid:
+      name: "Wi-Fi SSID"
+      id: wifi_ssid
+      entity_category: diagnostic
+      on_value:
+        - lvgl.label.update:
+            id: info_ssid_value
+            text: !lambda 'return x.empty() ? "--" : x.c_str();'
+    mac_address:
+      name: "MAC Address"
+      id: wifi_mac
+      entity_category: diagnostic
+      on_value:
+        - lvgl.label.update:
+            id: info_mac_value
+            text: !lambda 'return x.c_str();'
 
 light:
   # Halo ring: Adafruit #4892 / OPSCO SK68XX-EC3210F on GPIO47 (11 LEDs, GRB).
@@ -1200,6 +1289,10 @@ lvgl:
     - id: main_page
       bg_color: my_black
       scrollbar_mode: "OFF"
+      on_swipe_left:
+        - script.execute: show_next_page
+      on_swipe_right:
+        - script.execute: show_prev_page
       widgets:
         - image:
             id: ym_image          
@@ -1232,6 +1325,9 @@ lvgl:
             height: 42
             bg_color: 0x76fa76
             border_width: 0
+            # Let presses fall through to the page so swipes start here too.
+            clickable: false
+            scrollable: false
         - label:
             id: aqi_label
             align: LEFT_MID
@@ -1721,3 +1817,183 @@ lvgl:
             x: -2
             y: 299
             text: "%"
+
+    # Device info page (swipe left/right from main_page).
+    - id: info_page
+      bg_color: my_black
+      scrollbar_mode: "OFF"
+      on_swipe_left:
+        - script.execute: show_next_page
+      on_swipe_right:
+        - script.execute: show_prev_page
+      widgets:
+        - label:
+            align: TOP_MID
+            y: 8
+            text_font: montserrat_18
+            text_color: my_teal
+            text: "DEVICE INFO"
+        - line:
+            points:
+              - 0, 36
+              - 180, 36
+            line_width: 1
+            line_color: 0x00dfff
+# IP
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 46
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "IP ADDRESS"
+        - label:
+            id: info_ip_value
+            align: TOP_LEFT
+            x: 4
+            y: 64
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+# SSID
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 100
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "WI-FI"
+        - label:
+            id: info_ssid_value
+            align: TOP_LEFT
+            x: 4
+            y: 118
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+# RSSI
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 154
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "SIGNAL"
+        - label:
+            id: info_rssi_value
+            align: TOP_LEFT
+            x: 4
+            y: 172
+            width: 172
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+# MAC
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 208
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "MAC"
+        - label:
+            id: info_mac_value
+            align: TOP_LEFT
+            x: 4
+            y: 226
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+# HALO firmware
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 262
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "HALO VERSION"
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 280
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
+            text: "${version}"
+# ESPHome
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 316
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "ESPHOME"
+        - label:
+            id: info_esphome_value
+            align: TOP_LEFT
+            x: 4
+            y: 334
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+# Uptime
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 370
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "UPTIME"
+        - label:
+            id: info_uptime_value
+            align: TOP_LEFT
+            x: 4
+            y: 388
+            width: 172
+            text_font: montserrat_18
+            text_color: my_white
+            text: "--"
+        - line:
+            points:
+              - 0, 426
+              - 180, 426
+            line_width: 1
+            line_color: 0x00dfff
+# Debug logging toggle (mirrors the "Debug Logging" HA switch)
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 444
+            text_font: montserrat_14
+            text_color: my_white
+            text: "DEBUG LOGS"
+        - switch:
+            id: info_debug_switch
+            align: TOP_RIGHT
+            x: -6
+            y: 438
+            width: 56
+            height: 30
+            on_change:
+              - if:
+                  condition:
+                    lambda: "return x;"
+                  then:
+                    - switch.turn_on: debug_logging
+                  else:
+                    - switch.turn_off: debug_logging
+        - label:
+            align: BOTTOM_MID
+            y: -10
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "  swipe  "

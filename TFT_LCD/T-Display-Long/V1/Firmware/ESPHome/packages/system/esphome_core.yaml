@@ -3,7 +3,10 @@
 # Memory options adapted from community modular work (PSRAM / mbedTLS / TCP / WDT).
 
 logger:
-  level: WARN
+  # Compile DEBUG in so the "Debug Logging" switch can raise the level at
+  # runtime (logger.set_level can't exceed the compiled level). Boot at WARN.
+  level: DEBUG
+  initial_level: WARN
   baud_rate: 0
   logs:
     wifi: NONE
