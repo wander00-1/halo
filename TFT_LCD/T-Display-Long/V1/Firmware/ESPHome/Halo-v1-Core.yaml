@@ -257,6 +257,8 @@ i2c:
   - sda: 15
     scl: 10
     id: touch_i2c
+    # Fast bus keeps 20ms touch polling cheap on the main loop.
+    frequency: 400kHz
 
 output:
   - platform: ledc
@@ -286,7 +288,9 @@ touchscreen:
     id: lily_touch
     display: lily_display
     i2c_id: touch_i2c
-    interrupt_pin: GPIO11
+    # Poll instead of interrupt_pin: GPIO11 — the AXS15231 doesn't pulse INT
+    # reliably while dragging, so LVGL saw too few points to detect swipes.
+    update_interval: 20ms
     transform:
       mirror_x: false
       mirror_y: false
@@ -375,19 +379,17 @@ script:
           id: main_page
 
   # Swipe between main_page (sensors) and info_page (device info).
+  # No page animation: each frame is a full 180x640 QSPI redraw, which made
+  # the slide sluggish and swallowed swipes while it ran.
   - id: show_next_page
     then:
       - script.execute: sync_info_page
       - lvgl.page.next:
-          animation: MOVE_LEFT
-          time: 250ms
 
   - id: show_prev_page
     then:
       - script.execute: sync_info_page
       - lvgl.page.previous:
-          animation: MOVE_RIGHT
-          time: 250ms
 
   # Values that publish before LVGL is built (or never re-publish) are
   # pushed onto the info page here, right before it's shown.
