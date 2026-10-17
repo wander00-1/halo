@@ -22,6 +22,9 @@ esphome:
         - text_sensor.template.publish:
             id: halo_firmware_version
             state: "${fork_version}"
+        - text_sensor.template.publish:
+            id: halo_base_version
+            state: "${version}"
 
 # esp32 / psram / logger live in packages/system/esphome_core.yaml
 # BLE / improv lives in packages/features/ble/ (pick one in Halo-v1.yaml).
