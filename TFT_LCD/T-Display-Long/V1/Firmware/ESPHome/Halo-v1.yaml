@@ -14,7 +14,7 @@ esphome:
 
   project:
     name: "yashmulgaonkar.Halo-v1"
-    version: "${version}"
+    version: "${fork_version} (base ${version})"
 
 # SK68XX ring driver (repo-root components/ws2812_bitbang). Local path for
 # USB/CI builds from this directory; HA leaf installs use github:// — see PACKAGES.md.

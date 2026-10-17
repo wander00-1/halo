@@ -1,8 +1,11 @@
 #Define Project
 substitutions:
   name: halo
+  # Upstream HALO release this build is based on (leave as upstream sets it).
   version: "26.7.25.2"
-  device_description: ${name} - v${version}.
+  # This fork's own build version; bump on each change you ship.
+  fork_version: "1.0.0"
+  device_description: ${name} - v${fork_version} (base ${version}).
   # Horizontal travel (px, screen is 180 wide) that counts as a page swipe.
   swipe_min_px: "35"
 
@@ -11,14 +14,14 @@ substitutions:
 esphome:
   project:
     name: "yashmulgaonkar.Halo-v1"
-    version: "${version}"
+    version: "${fork_version} (base ${version})"
   comment: "${device_description}"
   on_boot:
     - priority: -100
       then:
         - text_sensor.template.publish:
             id: halo_firmware_version
-            state: "${version}"
+            state: "${fork_version}"
 
 # esp32 / psram / logger live in packages/system/esphome_core.yaml
 # BLE / improv lives in packages/features/ble/ (pick one in Halo-v1.yaml).
@@ -317,7 +320,7 @@ touchscreen:
             id(swipe_dx) = 0;
             id(swipe_dy) = 0;
             id(swipe_points) = 1;
-            ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+            ESP_LOGD("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
             touch.x,
             touch.y,
             touch.x_raw,
@@ -1210,6 +1213,13 @@ text_sensor:
     icon: mdi:information-outline
     entity_category: diagnostic
     update_interval: never
+    lambda: 'return {"${fork_version}"};'
+  - platform: template
+    name: "HALO Base Version"
+    id: halo_base_version
+    icon: mdi:source-branch
+    entity_category: diagnostic
+    update_interval: never
     lambda: 'return {"${version}"};'
   - platform: version
     name: "ESPHome Version"
@@ -1966,12 +1976,29 @@ lvgl:
             long_mode: SCROLL_CIRCULAR
             text_font: montserrat_18
             text_color: my_white
+            text: "${fork_version}"
+# Upstream base
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 316
+            text_font: montserrat_14
+            text_color: my_gray
+            text: "BASE VERSION"
+        - label:
+            align: TOP_LEFT
+            x: 4
+            y: 334
+            width: 172
+            long_mode: SCROLL_CIRCULAR
+            text_font: montserrat_18
+            text_color: my_white
             text: "${version}"
 # ESPHome
         - label:
             align: TOP_LEFT
             x: 4
-            y: 316
+            y: 370
             text_font: montserrat_14
             text_color: my_gray
             text: "ESPHOME"
@@ -1979,7 +2006,7 @@ lvgl:
             id: info_esphome_value
             align: TOP_LEFT
             x: 4
-            y: 334
+            y: 388
             width: 172
             long_mode: SCROLL_CIRCULAR
             text_font: montserrat_18
@@ -1989,7 +2016,7 @@ lvgl:
         - label:
             align: TOP_LEFT
             x: 4
-            y: 370
+            y: 424
             text_font: montserrat_14
             text_color: my_gray
             text: "UPTIME"
@@ -1997,22 +2024,22 @@ lvgl:
             id: info_uptime_value
             align: TOP_LEFT
             x: 4
-            y: 388
+            y: 442
             width: 172
             text_font: montserrat_18
             text_color: my_white
             text: "--"
         - line:
             points:
-              - 0, 426
-              - 180, 426
+              - 0, 480
+              - 180, 480
             line_width: 1
             line_color: 0x00dfff
 # Debug logging toggle (mirrors the "Debug Logging" HA switch)
         - label:
             align: TOP_LEFT
             x: 4
-            y: 444
+            y: 498
             text_font: montserrat_14
             text_color: my_white
             text: "DEBUG LOGS"
@@ -2020,7 +2047,7 @@ lvgl:
             id: info_debug_switch
             align: TOP_RIGHT
             x: -6
-            y: 438
+            y: 492
             width: 56
             height: 30
             on_change:
