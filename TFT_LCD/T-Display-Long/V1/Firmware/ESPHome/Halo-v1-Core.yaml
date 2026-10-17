@@ -303,10 +303,13 @@ touchscreen:
     # Must stay interrupt-driven: polled between reports, the AXS15231 reads
     # "no touch", so a drag turns into rapid press/release pairs.
     interrupt_pin: GPIO11
+    # Panel reports raw X along the long (640) axis, bottom→top, and raw Y
+    # across the short (180) axis, left→right. Corner taps measured:
+    # TL x598/y21, TR x627/y176, BL x10/y22, BR x33/y176.
     transform:
       mirror_x: false
-      mirror_y: false
-      swap_xy: false
+      mirror_y: true
+      swap_xy: true
     on_touch:
       - lambda: |-
             id(last_touch_time) = millis();
