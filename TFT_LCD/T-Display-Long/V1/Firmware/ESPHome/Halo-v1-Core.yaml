@@ -4,7 +4,7 @@ substitutions:
   # Upstream HALO release this build is based on (leave as upstream sets it).
   version: "26.7.25.2"
   # This fork's own build version; bump on each change you ship.
-  fork_version: "1.0.0"
+  fork_version: "1.1.0"
   device_description: ${name} - v${fork_version} (base ${version}).
   # Horizontal travel (px, screen is 180 wide) that counts as a page swipe.
   swipe_min_px: "35"
@@ -196,7 +196,19 @@ interval:
 
   - interval: 1s
     then:
-      - script.execute: time_update  
+      - script.execute: time_update
+
+  # Return from the info page to main_page after a period with no touches.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              uint32_t timeout_s = (uint32_t) id(info_page_timeout).state;
+              return timeout_s > 0 && id(info_page)->is_showing() &&
+                     (millis() - id(last_touch_time)) >= timeout_s * 1000UL;
+          then:
+            - lvgl.page.show: main_page
 
   - interval: 1s
     then:
@@ -498,6 +510,19 @@ script:
           id(scd40).write_command((uint16_t) 0x21B1); // start periodic measurement
 
 number:
+  - platform: template
+    name: "Info Page Timeout"
+    id: info_page_timeout
+    icon: mdi:timer-outline
+    restore_value: true
+    initial_value: 30
+    min_value: 0
+    max_value: 600
+    step: 5
+    unit_of_measurement: "s"
+    entity_category: "config"
+    optimistic: true
+    mode: box
   - platform: template
     name: SEN55 Temperature Offset
     id: sen55_temperature_offset
