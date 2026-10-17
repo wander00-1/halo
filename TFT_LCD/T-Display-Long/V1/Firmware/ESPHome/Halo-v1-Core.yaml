@@ -3,6 +3,8 @@ substitutions:
   name: halo
   version: "26.7.25.2"
   device_description: ${name} - v${version}.
+  # Horizontal travel (px, screen is 180 wide) that counts as a page swipe.
+  swipe_min_px: "35"
 
 # Project metadata must live here (not only in Halo-v1.yaml) so HA devices that
 # pull leaf packages without Halo-v1.yaml still report the HALO release version.
@@ -67,6 +69,16 @@ globals:
   - id: temp_unit_changed
     type: bool
     initial_value: "true"
+  # Swipe tracking (touchscreen on_touch / on_update / on_release).
+  - id: swipe_dx
+    type: int
+    initial_value: '0'
+  - id: swipe_dy
+    type: int
+    initial_value: '0'
+  - id: swipe_points
+    type: int
+    initial_value: '0'
 
 switch:
   - platform: template
@@ -288,9 +300,9 @@ touchscreen:
     id: lily_touch
     display: lily_display
     i2c_id: touch_i2c
-    # Poll instead of interrupt_pin: GPIO11 — the AXS15231 doesn't pulse INT
-    # reliably while dragging, so LVGL saw too few points to detect swipes.
-    update_interval: 20ms
+    # Must stay interrupt-driven: polled between reports, the AXS15231 reads
+    # "no touch", so a drag turns into rapid press/release pairs.
+    interrupt_pin: GPIO11
     transform:
       mirror_x: false
       mirror_y: false
@@ -299,12 +311,40 @@ touchscreen:
       - lambda: |-
             id(last_touch_time) = millis();
             id(last_auto_rotation_time) = millis();
+            id(swipe_dx) = 0;
+            id(swipe_dy) = 0;
+            id(swipe_points) = 1;
             ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
             touch.x,
             touch.y,
             touch.x_raw,
             touch.y_raw
             );
+    # Swipe detection from touch-down origin to last reported point. LVGL's
+    # own gesture detection needs a dense point stream this panel doesn't give.
+    on_update:
+      - lambda: |-
+            for (auto &t : touches) {
+              if (t.id != 0) continue;
+              id(swipe_dx) = (int) t.x - (int) t.x_org;
+              id(swipe_dy) = (int) t.y - (int) t.y_org;
+              id(swipe_points)++;
+            }
+    on_release:
+      - lambda: |-
+            ESP_LOGD("swipe", "dx=%d dy=%d points=%d",
+              id(swipe_dx), id(swipe_dy), id(swipe_points));
+      - if:
+          condition:
+            lambda: "return id(swipe_dx) <= -${swipe_min_px} && abs(id(swipe_dx)) > abs(id(swipe_dy));"
+          then:
+            - script.execute: show_next_page
+          else:
+            - if:
+                condition:
+                  lambda: "return id(swipe_dx) >= ${swipe_min_px} && abs(id(swipe_dx)) > abs(id(swipe_dy));"
+                then:
+                  - script.execute: show_prev_page
 
 web_server:
   port: 80
@@ -1291,10 +1331,8 @@ lvgl:
     - id: main_page
       bg_color: my_black
       scrollbar_mode: "OFF"
-      on_swipe_left:
-        - script.execute: show_next_page
-      on_swipe_right:
-        - script.execute: show_prev_page
+      # Swipes are detected in the touchscreen block, not by LVGL.
+      scrollable: false
       widgets:
         - image:
             id: ym_image          
@@ -1824,10 +1862,7 @@ lvgl:
     - id: info_page
       bg_color: my_black
       scrollbar_mode: "OFF"
-      on_swipe_left:
-        - script.execute: show_next_page
-      on_swipe_right:
-        - script.execute: show_prev_page
+      scrollable: false
       widgets:
         - label:
             align: TOP_MID
