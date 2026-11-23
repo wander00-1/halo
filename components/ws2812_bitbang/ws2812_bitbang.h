@@ -40,20 +40,16 @@ class WS2812BitbangLightOutput final : public light::AddressableLight {
   void set_rgb_order(RGBOrder rgb_order) { this->rgb_order_ = rgb_order; }
   void set_max_refresh_rate(uint32_t interval_us) { this->max_refresh_rate_ = interval_us; }
 
-  void clear_effect_data() override {
-    for (int i = 0; i < this->size(); i++)
-      this->effect_data_[i] = 0;
-  }
+  void clear_effect_data() override { this->internal_accessor_.clear_effect_data(this->num_leds_); }
 
   void dump_config() override;
 
  protected:
-  light::ESPColorView get_view_internal(int32_t index) const override;
   size_t get_buffer_size_() const { return this->num_leds_ * 3; }
   void show_();
 
-  uint8_t *buf_{nullptr};
-  uint8_t *effect_data_{nullptr};
+  // ESPHome 2026.11+ addressable light API: colour + effect buffers live in an accessor
+  light::CorrectedBufferColorAccessor internal_accessor_{nullptr, nullptr, {1, 0, 2}, &this->correction_};
   uint8_t pin_{0};
   uint16_t num_leds_{0};
   RGBOrder rgb_order_{ORDER_GRB};

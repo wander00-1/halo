@@ -57,24 +57,51 @@ static inline IRAM_ATTR void gpio47_low() { GPIO.out1_w1tc.val = (1u << (47 - 32
 static inline IRAM_ATTR void gpio_any_high(uint8_t pin) { gpio_ll_set_level(&GPIO, pin, 1); }
 static inline IRAM_ATTR void gpio_any_low(uint8_t pin) { gpio_ll_set_level(&GPIO, pin, 0); }
 
+static light::ChannelColors channel_colors_for(RGBOrder order) {
+  uint8_t r = 0, g = 1, b = 2;
+  switch (order) {
+    case ORDER_RGB:
+      r = 0;
+      g = 1;
+      b = 2;
+      break;
+    case ORDER_RBG:
+      r = 0;
+      g = 2;
+      b = 1;
+      break;
+    case ORDER_GRB:
+      r = 1;
+      g = 0;
+      b = 2;
+      break;
+    case ORDER_GBR:
+      r = 2;
+      g = 0;
+      b = 1;
+      break;
+    case ORDER_BGR:
+      r = 2;
+      g = 1;
+      b = 0;
+      break;
+    case ORDER_BRG:
+      r = 1;
+      g = 2;
+      b = 0;
+      break;
+  }
+  return {r, g, b};
+}
+
 void WS2812BitbangLightOutput::setup() {
-  size_t buffer_size = this->get_buffer_size_();
+  this->internal_accessor_.channel_colors = channel_colors_for(this->rgb_order_);
   RAMAllocator<uint8_t> allocator(RAMAllocator<uint8_t>::ALLOC_INTERNAL);
-  this->buf_ = allocator.allocate(buffer_size);
-  if (this->buf_ == nullptr) {
+  if (!this->internal_accessor_.allocate(allocator, this->num_leds_)) {
     ESP_LOGE(TAG, "Cannot allocate LED buffer");
     this->mark_failed();
     return;
   }
-  memset(this->buf_, 0, buffer_size);
-
-  this->effect_data_ = allocator.allocate(this->num_leds_);
-  if (this->effect_data_ == nullptr) {
-    ESP_LOGE(TAG, "Cannot allocate effect data");
-    this->mark_failed();
-    return;
-  }
-  memset(this->effect_data_, 0, this->num_leds_);
 
   gpio_config_t cfg = {};
   cfg.pin_bit_mask = 1ULL << this->pin_;
@@ -84,10 +111,12 @@ void WS2812BitbangLightOutput::setup() {
   cfg.intr_type = GPIO_INTR_DISABLE;
   gpio_config(&cfg);
   gpio_set_level(static_cast<gpio_num_t>(this->pin_), 0);
+
+  this->accessor_ = &this->internal_accessor_;
 }
 
 void IRAM_ATTR HOT WS2812BitbangLightOutput::show_() {
-  const uint8_t *p = this->buf_;
+  const uint8_t *p = this->internal_accessor_.color_data;
   const uint8_t *end = p + this->get_buffer_size_();
   const uint8_t pin = this->pin_;
   const bool pin47 = (pin == 47);
@@ -145,44 +174,6 @@ void WS2812BitbangLightOutput::write_state(light::LightState *state) {
   this->mark_shown_();
   this->show_();
   this->status_clear_warning();
-}
-
-light::ESPColorView WS2812BitbangLightOutput::get_view_internal(int32_t index) const {
-  int32_t r = 0, g = 1, b = 2;
-  switch (this->rgb_order_) {
-    case ORDER_RGB:
-      r = 0;
-      g = 1;
-      b = 2;
-      break;
-    case ORDER_RBG:
-      r = 0;
-      g = 2;
-      b = 1;
-      break;
-    case ORDER_GRB:
-      r = 1;
-      g = 0;
-      b = 2;
-      break;
-    case ORDER_GBR:
-      r = 2;
-      g = 0;
-      b = 1;
-      break;
-    case ORDER_BGR:
-      r = 2;
-      g = 1;
-      b = 0;
-      break;
-    case ORDER_BRG:
-      r = 1;
-      g = 2;
-      b = 0;
-      break;
-  }
-  return {this->buf_ + (index * 3) + r, this->buf_ + (index * 3) + g, this->buf_ + (index * 3) + b, nullptr,
-          &this->effect_data_[index], &this->correction_};
 }
 
 void WS2812BitbangLightOutput::dump_config() {
